@@ -1,0 +1,8 @@
+.git
+**/target
+.vscode
+.agents
+.codex
+.aws
+.env
+experiments/results
