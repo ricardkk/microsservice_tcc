@@ -77,7 +77,7 @@ class OrderApiTest extends HttpTestSupport {
    var response = request("POST", "/orders", input(2));
    int expected = scenario.startsWith("missing") ? 422 : scenario.equals("timeout") ? 504 : 502;
    assertThat(response.statusCode()).as(scenario + ": " + response.body()).isEqualTo(expected);
-   assertThat(tree(response).get("traceId").asText()).isEqualTo("test-trace-123");
+   assertThat(tree(response).get("traceId").asString()).isEqualTo("test-trace-123");
    assertThat(repository.count()).isEqualTo(before);
   }
  }

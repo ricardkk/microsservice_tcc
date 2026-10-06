@@ -15,6 +15,18 @@ docker compose up --build -d --wait
 python3 scripts/smoke.py --check-logs
 ```
 
+Experimento individual e restauração:
+
+```bash
+FAULT_ENABLED=true docker compose up --build -d --wait
+./experiments/run-experiment.sh E02
+./experiments/run-experiment.sh E03
+./experiments/reset-environment.sh
+python3 -m unittest discover -s experiments -p 'test_*.py' -v
+```
+
+Se Docker exigir sudo, use `sudo env FAULT_ENABLED=true docker compose up --build -d --wait` e execute os scripts com `sudo`. Veja [experiments/README.md](experiments/README.md) para os cinco cenários, resultados e limites de restauração.
+
 Para executar as aplicações fora dos containers, inicie os bancos e use um terminal por serviço:
 
 ```bash

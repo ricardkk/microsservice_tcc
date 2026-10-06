@@ -44,7 +44,8 @@ public class ApiExceptionHandler {
  }
  private ResponseEntity<ErrorBody> error(int status, String code, String message, List<String> details, Exception cause) {
   if (status >= 500) log.atError().addKeyValue("errorCode", code).addKeyValue("status", status).setCause(cause).log(message);
-  else log.atWarn().addKeyValue("errorCode", code).addKeyValue("status", status).log(message);
+  else log.atWarn().addKeyValue("errorCode", code).addKeyValue("status", status)
+    .addKeyValue("details", details).log(message);
   return ResponseEntity.status(status).body(new ErrorBody(Instant.now(), status, code, message, MDC.get("traceId"), details));
  }
 }

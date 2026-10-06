@@ -59,7 +59,7 @@ def main():
     if args.faults:
         for fault_type, status in [("internal-error", 502), ("database", 502), ("timeout", 504), ("not-found", 422), ("invalid-response", 502)]:
             call("POST", "/orders", payload, status, ("product-service", fault_type))
-        for fault_type, status in [("internal-error", 500), ("database", 503), ("timeout", 504)]:
+        for fault_type, status in [("internal-error", 500), ("database", 503), ("timeout", 400)]:
             call("POST", "/orders", payload, status, ("order-service", fault_type))
     assert len(call("GET", "/orders?userId=" + str(user["id"]))) == 1, "Falha persistiu pedido parcial"
     if args.check_logs:

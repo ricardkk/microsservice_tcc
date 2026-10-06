@@ -19,9 +19,18 @@ class ProductApiTest extends HttpTestSupport {
  @Test void faultsAreDeterministicAndRequestScoped() throws Exception {
   for (String type : new String[]{"internal-error", "database", "timeout", "not-found", "invalid-response"}) {
    var response = request("GET", "/products", null, "X-Fault-Service", "product-service", "X-Fault-Type", type);
-   int expected = switch(type) { case "internal-error" -> 500; case "database" -> 503; case "timeout" -> 504; case "not-found" -> 404; default -> 200; };
+   int expected = switch(type) { case "internal-error" -> 500; case "database" -> 503; case "not-found" -> 404; default -> 200; };
    assertThat(response.statusCode()).isEqualTo(expected);
+   if (type.equals("internal-error")) assertThat(tree(response).get("code").asString()).isEqualTo("INTERNAL_ERROR");
+   if (type.equals("timeout")) assertThat(tree(response).isArray()).isTrue();
    assertThat(request("GET", "/products", null).statusCode()).isEqualTo(200);
   }
+ }
+ @Test void delayCannotWriteAndAnUnmatchedTargetDoesNotInject() throws Exception {
+  String input = "{\"name\":\"Livro\",\"description\":\"Teste\",\"price\":19.95,\"stock\":10}";
+  int before = tree(request("GET", "/products", null)).size();
+  assertThat(request("POST", "/products", input, "X-Fault-Service", "product-service", "X-Fault-Type", "timeout").statusCode()).isEqualTo(400);
+  assertThat(tree(request("GET", "/products", null)).size()).isEqualTo(before);
+  assertThat(request("GET", "/products", null, "X-Fault-Service", "order-service", "X-Fault-Type", "internal-error").statusCode()).isEqualTo(200);
  }
 }

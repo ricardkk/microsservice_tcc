@@ -4,6 +4,7 @@ x-app: &app
     PORT: 8080
     FAULT_ENABLED: ${FAULT_ENABLED:-false}
     FAULT_DELAY_MS: ${FAULT_DELAY_MS:-5000}
+    DB_CONNECTION_TIMEOUT_MS: ${DB_CONNECTION_TIMEOUT_MS:-1000}
     JAVA_TOOL_OPTIONS: -Xms64m -Xmx384m
   healthcheck:
     test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8080/actuator/health"]

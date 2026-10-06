@@ -36,6 +36,10 @@ Existe um único **`pom.xml`** na raiz e uma única pasta **`src/`**. Os pacotes
 ├── compose.yaml
 ├── scripts/smoke.py
 └── experiments/
+    ├── runner.py                   # Executor Python; biblioteca padrão
+    ├── run-experiment.sh
+    ├── reset-environment.sh
+    ├── test_runner.py
     ├── scenarios/
     └── results/
 ```
@@ -120,7 +124,7 @@ Internamente, os endpoints usam os mesmos caminhos sem `/api`. O health check fi
 
 O cabeçalho `X-Trace-Id` é propagado do gateway às chamadas de Order e devolvido na resposta. Quando ausente ou inválido, o serviço gera um UUID. IDs recebidos aceitam 1–64 caracteres de letras, números, `.`, `_` e `-`. O contexto de logging é limpo ao finalizar cada requisição.
 
-Os logs JSON no stdout contêm `timestamp`, `level`, `service`, `message` e, durante requisições, `traceId` e `operation`. Eventos de inicialização não têm contexto de requisição. Campos como `orderId`, `productId`, `downstreamStatus`, `durationMs`, `errorCode`, `faultId` e `stack_trace` ajudam a diagnosticar falhas. Os logs não registram o corpo das requisições nem emails de usuários.
+Os logs JSON no stdout contêm `timestamp`, `level`, `service`, `message` e, durante requisições, `traceId` e `operation`. Eventos de inicialização não têm contexto de requisição. Campos como `orderId`, `productId`, `downstreamStatus`, `durationMs`, `errorCode`, `details` de validação e `stack_trace` ajudam a diagnosticar falhas. Os logs não registram o corpo das requisições nem emails de usuários. O cenário de injeção fica nos metadados do operador, sem marcadores explícitos de injeção nos logs.
 
 Formato de erro:
 
@@ -139,12 +143,33 @@ Validação retorna 400; recurso local ausente retorna 404; conflito de dados re
 
 Os clientes têm timeout de conexão de 1000 ms e leitura de 2000 ms. A leitura no gateway é de 10000 ms para permitir que Order informe falhas nos serviços consultados. Não são adicionados mecanismos de recuperação automática.
 
-A injeção é desabilitada por padrão e ativada com `FAULT_ENABLED=true`. O catálogo inicial, exemplos e procedimentos para indisponibilidade real estão em [experiments/scenarios/README.md](experiments/scenarios/README.md).
+A aquisição de conexão no pool dos bancos tem limite padrão de 1000 ms, configurável com `DB_CONNECTION_TIMEOUT_MS`, para dar margem ao Order receber o erro antes de seu timeout HTTP. Esse limite não cobre toda consulta SQL.
+
+## Experimentos de erros controlados
+
+A injeção por requisição é desabilitada por padrão e ativada com `FAULT_ENABLED=true`. E02 e E05 usam parada real do banco/serviço; E03 e E04 usam cabeçalhos direcionados ao Product. O atraso atua somente em consultas GET, e o timeout é produzido pelo cliente HTTP do Order.
+
+```bash
+FAULT_ENABLED=true docker compose up --build -d --wait
+./experiments/run-experiment.sh E01
+./experiments/run-experiment.sh E02
+./experiments/run-experiment.sh E03
+./experiments/run-experiment.sh E04
+./experiments/run-experiment.sh E05
+./experiments/reset-environment.sh
+```
+
+Se o Docker exigir sudo, use `sudo env FAULT_ENABLED=true docker compose up --build -d --wait` na preparação e `sudo ./experiments/run-experiment.sh E02` para executar. O reset também aceita sudo.
+
+O executor cria dados válidos, captura o `traceId` gerado pela aplicação, salva cada execução em `experiments/results/<cenário>/<run-id>/` e restaura o recurso afetado mesmo em falhas ou interrupções tratáveis. Verifica ausência de pedidos persistidos e alterações de estoque. Os logs permanecem separados por serviço e o diagnóstico humano é feito posteriormente. O reset preserva volumes e desabilita a injeção nos processos, sem modificar `.env`.
+
+Consulte [experiments/README.md](experiments/README.md) para contratos HTTP, timeouts, limites da restauração e separação dos metadados do operador na avaliação.
 
 ## Desenvolvimento e testes
 
 ```bash
 ./mvnw clean verify
+python3 -m unittest discover -s experiments -p 'test_*.py' -v
 ```
 
 O build gera os quatro executáveis abaixo, além do JAR base `microservices-1.0.0-SNAPSHOT.jar`, usado no empacotamento:
@@ -182,6 +207,8 @@ As classes devem aparecer no projeto `microservices`. Os antigos projetos `demo`
 
 ## Validação
 
-O build com POM único passou em `clean verify`, com 14 testes. Uma importação nova pelo servidor Java utilizado pelo VS Code analisou os 34 arquivos Java sem erros de compilação, importação ou classpath. Permanecem apenas avisos de API obsoleta (`JsonNode.asText()`) nos testes.
+O build passou em `clean verify`, com 15 testes Java. Os 10 testes Python do executor também passaram, usando HTTP real local e um substituto do controle Docker para verificar registro e restauração, incluindo interrupção, conexão perdida, falha na coleta, falha na recuperação e detecção de pedido persistido indevidamente.
 
-Os quatro JARs também foram iniciados como processos separados, usando H2 temporariamente na validação: passaram 20 verificações HTTP, a correlação dos logs nos quatro serviços e a verificação de conexão recusada após parar Product. As configurações de execução continuam usando PostgreSQL. O Compose passou na validação de configuração; a execução dos containers não foi validada neste ambiente por falta de acesso ao daemon Docker.
+Os quatro JARs foram iniciados como processos separados com H2 temporário: passaram 20 verificações HTTP do smoke, a correlação nos quatro serviços, a confirmação do timeout real no Order com conclusão normal do GET atrasado no Product, a ausência de marcadores explícitos de injeção e o registro do campo inválido nos logs de validação. As configurações de execução continuam usando PostgreSQL.
+
+O Compose passou na validação de configuração. A execução E01–E05 com containers e PostgreSQL reais permanece pendente neste ambiente: o acesso ao daemon exige sudo e `sudo -n` solicita senha. Os comandos de execução com sudo estão documentados acima.
