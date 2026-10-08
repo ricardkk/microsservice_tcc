@@ -205,17 +205,45 @@ def prepare_fixtures(args, run_id, metadata):
     return {"userId": user["id"], "items": [{"productId": product["id"], "quantity": 1}]}
 
 
-def verify_restored(args, metadata):
-    require_response(http_call(args.url, "GET", "/actuator/health", timeout=args.request_timeout), 200, "Health após restauração")
+def verify_restored(args, metadata, deadline=None):
+    def call(path, context):
+        timeout = args.request_timeout
+        if deadline is not None:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise ExperimentError(f"Prazo de recuperação esgotado: {context}")
+            timeout = min(timeout, remaining)
+        return require_response(http_call(args.url, "GET", path, timeout=timeout), 200, context)
+
+    call("/actuator/health", "Health após restauração")
     fixtures = metadata.get("fixtures", {})
     if "ordersBefore" not in fixtures:
         return
-    orders = require_response(http_call(args.url, "GET", f"/api/orders?userId={fixtures['userId']}", timeout=args.request_timeout), 200, "Pedidos após restauração")
-    product = require_response(http_call(args.url, "GET", f"/api/products/{fixtures['productId']}", timeout=args.request_timeout), 200, "Produto após restauração")
+    orders = call(f"/api/orders?userId={fixtures['userId']}", "Pedidos após restauração")
+    product = call(f"/api/products/{fixtures['productId']}", "Produto após restauração")
     fixtures["ordersAfter"] = [order["id"] for order in orders]
     fixtures["stockAfter"] = product["stock"]
     if fixtures["ordersAfter"] != fixtures["ordersBefore"] or fixtures["stockAfter"] != fixtures["initialStock"]:
         raise InvariantViolation("Invariante violada: a requisição de falha persistiu pedido ou alterou estoque.")
+
+
+def wait_restored(args, metadata):
+    # Container health can still be cached while database connections recover.
+    # Poll only the recovery GETs, after recording the experimental response.
+    deadline = time.monotonic() + args.ready_timeout
+    while True:
+        try:
+            verify_restored(args, metadata, deadline)
+            return
+        except (InvariantViolation, Interrupted):
+            raise
+        except ExperimentError as error:
+            remaining = deadline - time.monotonic()
+            if remaining > 0:
+                time.sleep(min(1, remaining))
+                if time.monotonic() < deadline:
+                    continue
+            raise ExperimentError(f"Recuperação funcional não concluída em {args.ready_timeout}s: {error}") from error
 
 
 def collect_logs(compose, directory, metadata):
@@ -234,7 +262,7 @@ def collect_logs(compose, directory, metadata):
         raise ExperimentError("Falha na coleta de logs; consulte metadata.json.")
 
 
-def run_experiment(args, compose):
+def run_experiment(args, compose, after=None):
     scenario = SCENARIOS[args.scenario]
     run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ") + "-" + uuid.uuid4().hex[:8]
     directory = args.results_dir / args.scenario / run_id
@@ -311,8 +339,9 @@ def run_experiment(args, compose):
                     compose.start([resource], args.ready_timeout)
                 if ready:
                     compose.wait_ready(args.ready_timeout)
+                    print("Aguardando recuperação funcional e verificando dados.", flush=True)
                     try:
-                        verify_restored(args, metadata)
+                        wait_restored(args, metadata)
                         metadata["invariants"] = {"success": True}
                     except InvariantViolation as error:
                         metadata["invariants"] = {"success": False, "error": str(error)}
@@ -326,6 +355,16 @@ def run_experiment(args, compose):
                 exit_code = 1
             metadata["finishedAt"] = timestamp()
             write_json(directory / "metadata.json", metadata)
+    if metadata["success"] and after:
+        try:
+            metadata["observability"] = after(args, compose, metadata, directory)
+        except Exception as error:
+            metadata["observability"] = {"success": False, "error": str(error)}
+            metadata["success"] = False
+            metadata.setdefault("error", str(error))
+            exit_code = 128 + error.signum if isinstance(error, Interrupted) else 1
+        metadata["finishedAt"] = timestamp()
+        write_json(directory / "metadata.json", metadata)
     print(f"{args.scenario}: {'concluído' if metadata['success'] else 'falhou'}. Resultados: {directory}")
     if metadata.get("error"):
         print(metadata["error"], file=sys.stderr)
@@ -344,7 +383,7 @@ def reset_environment(args, compose):
     print("Ambiente restaurado; injeção desabilitada nos processos. Dados e resultados preservados.")
 
 
-def main():
+def main(before=None, after=None, reset=None):
     parser = argparse.ArgumentParser(description="Executa um cenário controlado e restaura o ambiente")
     parser.add_argument("scenario", choices=(*SCENARIOS, "reset"))
     parser.add_argument("--url", default="http://localhost:8080", help="Gateway do mesmo projeto Compose")
@@ -359,8 +398,12 @@ def main():
             compose = Compose()
             if args.scenario == "reset":
                 reset_environment(args, compose)
+                if reset:
+                    reset(args, compose)
                 return 0
-            return run_experiment(args, compose)
+            if before:
+                before(args, compose)
+            return run_experiment(args, compose, after=after)
     except (ExperimentError, KeyboardInterrupt, ValueError) as error:
         print(str(error), file=sys.stderr)
         return 128 + error.signum if isinstance(error, Interrupted) else 1

@@ -1,5 +1,5 @@
 target/
-.mvn/wrapper/maven-wrapper.jar
+**/.mvn/wrapper/maven-wrapper.jar
 
 ### STS ###
 .apt_generated
@@ -31,6 +31,6 @@ build/
 
 # Local experiment settings and outputs
 .env
-experiments/results/*
-!experiments/results/.gitkeep
+**/experiments/results/*
+!**/experiments/results/.gitkeep
 __pycache__/

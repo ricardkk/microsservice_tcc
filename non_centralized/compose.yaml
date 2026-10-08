@@ -1,0 +1,124 @@
+name: tcc-microservices
+x-app: &app
+  labels: &app-labels
+    tcc.stack: non_centralized
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+      labels: "tcc.stack,tcc.service"
+  environment: &app-env
+    PORT: 8080
+    FAULT_ENABLED: ${FAULT_ENABLED:-false}
+    FAULT_DELAY_MS: ${FAULT_DELAY_MS:-5000}
+    DB_CONNECTION_TIMEOUT_MS: ${DB_CONNECTION_TIMEOUT_MS:-1000}
+    JAVA_TOOL_OPTIONS: -Xms64m -Xmx384m
+  healthcheck:
+    test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8080/actuator/health"]
+    interval: 5s
+    timeout: 3s
+    retries: 30
+    start_period: 30s
+x-db: &db
+  image: postgres:17-alpine
+  environment: &db-env
+    POSTGRES_USER: tcc
+    POSTGRES_PASSWORD: ${DB_PASSWORD:-tcc}
+  healthcheck:
+    test: ["CMD-SHELL", "pg_isready -U tcc -d $$POSTGRES_DB"]
+    interval: 5s
+    timeout: 3s
+    retries: 20
+services:
+  users-db:
+    <<: *db
+    environment:
+      <<: *db-env
+      POSTGRES_DB: users_db
+    ports: ["127.0.0.1:5431:5432"]
+    volumes: ["users-data:/var/lib/postgresql/data"]
+  products-db:
+    <<: *db
+    environment:
+      <<: *db-env
+      POSTGRES_DB: products_db
+    ports: ["127.0.0.1:5432:5432"]
+    volumes: ["products-data:/var/lib/postgresql/data"]
+  orders-db:
+    <<: *db
+    environment:
+      <<: *db-env
+      POSTGRES_DB: orders_db
+    ports: ["127.0.0.1:5433:5432"]
+    volumes: ["orders-data:/var/lib/postgresql/data"]
+  user-service:
+    <<: *app
+    labels:
+      <<: *app-labels
+      tcc.service: user-service
+    build:
+      context: .
+      args: {SERVICE: user-service}
+    environment:
+      <<: *app-env
+      DB_URL: jdbc:postgresql://users-db:5432/users_db
+      DB_PASSWORD: ${DB_PASSWORD:-tcc}
+    depends_on:
+      users-db: {condition: service_healthy}
+  product-service:
+    <<: *app
+    labels:
+      <<: *app-labels
+      tcc.service: product-service
+    build:
+      context: .
+      args: {SERVICE: product-service}
+    environment:
+      <<: *app-env
+      DB_URL: jdbc:postgresql://products-db:5432/products_db
+      DB_PASSWORD: ${DB_PASSWORD:-tcc}
+    depends_on:
+      products-db: {condition: service_healthy}
+  order-service:
+    <<: *app
+    labels:
+      <<: *app-labels
+      tcc.service: order-service
+    build:
+      context: .
+      args: {SERVICE: order-service}
+    environment:
+      <<: *app-env
+      DB_URL: jdbc:postgresql://orders-db:5432/orders_db
+      DB_PASSWORD: ${DB_PASSWORD:-tcc}
+      USER_SERVICE_URL: http://user-service:8080
+      PRODUCT_SERVICE_URL: http://product-service:8080
+    depends_on:
+      orders-db: {condition: service_healthy}
+      user-service: {condition: service_healthy}
+      product-service: {condition: service_healthy}
+  gateway:
+    <<: *app
+    labels:
+      <<: *app-labels
+      tcc.service: gateway
+    build:
+      context: .
+      args: {SERVICE: gateway}
+    environment:
+      <<: *app-env
+      USER_SERVICE_URL: http://user-service:8080
+      PRODUCT_SERVICE_URL: http://product-service:8080
+      ORDER_SERVICE_URL: http://order-service:8080
+      HTTP_READ_TIMEOUT_MS: 10000
+      JAVA_TOOL_OPTIONS: -Xms64m -Xmx256m
+    ports: ["127.0.0.1:8080:8080"]
+    depends_on:
+      user-service: {condition: service_healthy}
+      product-service: {condition: service_healthy}
+      order-service: {condition: service_healthy}
+volumes:
+  users-data:
+  products-data:
+  orders-data:

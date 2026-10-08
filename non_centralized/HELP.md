@@ -1,5 +1,7 @@
 # Comandos de desenvolvimento
 
+Execute estes comandos dentro de `non_centralized/`. Na raiz do repositório, use `./tcc.sh non_centralized` para selecionar o Compose. A Parte 2 fica em `centralized/`.
+
 Java 21, Spring Boot 4.1.1, um único `pom.xml` e uma única pasta `src/`. Os pacotes `common`, `gateway`, `order`, `product` e `user` ficam diretamente em `src/main/java/` e `src/test/java/`.
 
 Build completo e testes:

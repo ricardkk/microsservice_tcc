@@ -35,6 +35,12 @@ class Api(BaseHTTPRequestHandler):
         elif self.path.startswith("/api/users/"):
             body = {"id": 42}
         elif self.path.startswith("/api/products/"):
+            if self.server.requests:
+                self.server.recovery_reads += 1
+                if self.server.product_failures:
+                    self.server.product_failures -= 1
+                    self.respond(503, {"code": "DATABASE_UNAVAILABLE"})
+                    return
             body = {"id": 71, "stock": 10}
         elif self.path.startswith("/api/orders"):
             body = self.server.orders
@@ -119,11 +125,13 @@ class RunnerTest(unittest.TestCase):
         self.api.requests = []
         self.api.status = None
         self.api.persist = False
+        self.api.product_failures = 0
+        self.api.recovery_reads = 0
 
-    def execute(self, scenario="E02"):
+    def execute(self, scenario="E02", after=None):
         self.args.scenario = self.api.scenario = scenario
         with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()), patch.object(runner, "wait_until"):
-            code = runner.run_experiment(self.args, self.compose)
+            code = runner.run_experiment(self.args, self.compose, after=after)
         directories = sorted((self.args.results_dir / scenario).iterdir())
         directory = directories[-1]
         return code, json.loads((directory / "metadata.json").read_text()), directory
@@ -190,11 +198,37 @@ class RunnerTest(unittest.TestCase):
 
     def test_persisted_order_fails_invariant_without_claiming_stack_restore_failed(self):
         self.api.persist = True
-        code, metadata, _ = self.execute()
+        with patch.object(runner.time, "sleep") as sleep:
+            code, metadata, _ = self.execute()
+        sleep.assert_not_called()
         self.assertEqual(code, 1)
         self.assertFalse(metadata["invariants"]["success"])
         self.assertTrue(metadata["cleanup"]["success"])
         self.assertEqual(metadata["fixtures"]["ordersAfter"], [99])
+
+    def test_product_recovers_after_healthy_container_and_temporary_503(self):
+        self.api.product_failures = 2
+        with patch.object(runner.time, "sleep"):
+            code, metadata, directory = self.execute()
+        self.assertEqual(code, 0)
+        self.assertEqual(self.api.recovery_reads, 3)
+        self.assertEqual(len(self.api.requests), 1)
+        self.assertEqual(metadata["observedResponse"]["status"], 502)
+        self.assertEqual(json.loads((directory / "response.json").read_text())["status"], 502)
+        self.assertTrue(metadata["cleanup"]["success"])
+        self.assertTrue(metadata["invariants"]["success"])
+        self.assertEqual(metadata["fixtures"]["stockAfter"], 10)
+
+    def test_product_recovery_timeout_preserves_failure_response(self):
+        self.api.product_failures = 1000
+        self.args.ready_timeout = .05
+        code, metadata, directory = self.execute()
+        self.assertEqual(code, 1)
+        self.assertFalse(metadata["cleanup"]["success"])
+        self.assertIn("Recuperação funcional não concluída", metadata["cleanup"]["error"])
+        self.assertIn("HTTP 503", metadata["cleanup"]["error"])
+        self.assertEqual(len(self.api.requests), 1)
+        self.assertEqual(json.loads((directory / "response.json").read_text())["status"], 502)
 
     def test_unready_environment_aborts_before_creating_data_or_stopping_resources(self):
         self.compose.ready = False
@@ -216,6 +250,28 @@ class RunnerTest(unittest.TestCase):
         _, _, second = self.execute()
         self.assertNotEqual(first, second)
         self.assertTrue((first / "metadata.json").exists())
+
+    def test_observability_failure_is_reported_after_resource_restoration(self):
+        def verify(args, compose, metadata, directory):
+            self.assertEqual(compose.started, ["products-db"])
+            self.assertTrue(metadata["cleanup"]["success"])
+            raise runner.ExperimentError("Loki indisponível")
+
+        code, metadata, _ = self.execute(after=verify)
+        self.assertEqual(code, 1)
+        self.assertTrue(metadata["cleanup"]["success"])
+        self.assertFalse(metadata["observability"]["success"])
+        self.assertFalse(metadata["success"])
+
+    def test_signal_during_delivery_check_preserves_exit_status_and_restoration(self):
+        def verify(args, compose, metadata, directory):
+            self.assertEqual(compose.started, ["products-db"])
+            raise runner.Interrupted(signal.SIGTERM)
+
+        code, metadata, _ = self.execute(after=verify)
+        self.assertEqual(code, 128 + signal.SIGTERM)
+        self.assertTrue(metadata["cleanup"]["success"])
+        self.assertFalse(metadata["observability"]["success"])
 
     def test_lock_is_shared_even_when_results_directory_changes(self):
         with patch.object(runner, "ROOT", Path(self.temporary.name)):

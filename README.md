@@ -1,214 +1,106 @@
-# Base de microsserviços para o TCC
+# Microsserviços — comparação de logs para o TCC
 
-Aplicação experimental simples para estudar diagnóstico de erros por logs. Implementa criação e consulta de usuários, produtos e pedidos, comunicação HTTP síncrona, persistência independente, logs JSON e falhas controladas.
-
-O fluxo principal é `cliente → gateway → order-service → user-service / product-service`. Somente Order acessa `orders_db`; User e Product acessam seus respectivos bancos. O gateway encaminha as respostas sem regras de negócio. Ele usa Spring Web e RestClient, evitando adicionar Spring Cloud para as três rotas fixas desta base.
-
-## Organização
-
-Existe um único **`pom.xml`** na raiz e uma única pasta **`src/`**. Os pacotes Java são `common`, `gateway`, `order`, `product` e `user`.
+Este repositório contém os dois cenários do estudo de diagnóstico de falhas por logs. A aplicação, os contratos HTTP, as migrações, os timeouts e os mecanismos E01–E05 são iguais. A Parte 2 acrescenta Fluent Bit, Loki e Grafana para disponibilizar os logs centralmente.
 
 ```text
-.
-├── pom.xml                         # Dependências, testes e quatro executáveis
-├── src/
-│   ├── main/
-│   │   ├── java/
-│   │   │   ├── common/
-│   │   │   ├── gateway/
-│   │   │   ├── user/
-│   │   │   ├── product/
-│   │   │   └── order/
-│   │   └── resources/
-│   │       ├── common.properties
-│   │       ├── services/
-│   │       │   ├── gateway/application.properties
-│   │       │   ├── user-service/application.properties
-│   │       │   ├── product-service/application.properties
-│   │       │   └── order-service/application.properties
-│   │       └── db/migration/
-│   │           ├── user/V1__create_users.sql
-│   │           ├── product/V1__create_products.sql
-│   │           └── order/V1__create_orders.sql
-│   └── test/java/                  # Mesmos cinco pacotes
-├── target/                         # Classes, relatórios e JARs; ignorado pelo Git
-├── Dockerfile
-├── compose.yaml
-├── scripts/smoke.py
-└── experiments/
-    ├── runner.py                   # Executor Python; biblioteca padrão
-    ├── run-experiment.sh
-    ├── reset-environment.sh
-    ├── test_runner.py
-    ├── scenarios/
-    └── results/
+microsservice_tcc/
+├── non_centralized/       # Parte 1: aplicação e logs separados
+│   ├── pom.xml, mvnw, Dockerfile, compose.yaml
+│   ├── src/main/java/    # common, gateway, user, product, order
+│   ├── scripts/
+│   └── experiments/
+├── centralized/           # Parte 2: mesma aplicação + centralização
+│   ├── pom.xml, mvnw, Dockerfile, compose.yaml
+│   ├── src/main/java/
+│   ├── scripts/
+│   ├── experiments/
+│   └── observability/
+│       ├── fluent-bit/
+│       ├── loki/
+│       └── grafana/
+├── scripts/check-parity.py
+└── tcc.sh                 # Escolhe o projeto para comandos Compose
 ```
 
-### Organização do build e das configurações
+Cada cenário é um projeto Maven independente, com um único POM e sua própria `src/`. O Git permanece na raiz. Abra a pasta do cenário no editor para trabalhar no respectivo projeto Java.
 
-O projeto usa **um único módulo Maven**. A estrutura anterior associava a mesma pasta de fontes a cinco projetos, fazendo o servidor Java do VS Code atribuir arquivos ao projeto errado e perder a resolução de dependências. O POM único permite ao Maven e ao editor usar a estrutura padrão `src/main/java` e `src/test/java`.
+Consulte o [guia detalhado de execução e investigação](GUIA_EXPERIMENTOS.md) para os comandos de cada ambiente e de E01–E05, consultas dos logs, restauração e registro da comparação.
 
-Java 21 e Spring Boot 4.1.1 foram preservados. O build gera quatro JARs executáveis, cada um com sua classe principal. Eles compartilham o código e as dependências empacotados, mas cada processo inicializa apenas os componentes do pacote de seu serviço. `common` contém a infraestrutura compartilhada; os serviços mantêm bancos e comunicação HTTP independentes.
+## Executar os cenários
 
-**Properties:** cada classe `*Application` seleciona `classpath:/services/<serviço>/` como localização adicional de configuração antes de iniciar o Spring. As quatro configurações mantêm portas, URLs e bancos próprios e importam `common.properties`. Não é necessário selecionar um perfil. O gateway desabilita as autoconfigurações de banco, JPA e Flyway, pois não utiliza persistência.
+Requisitos: Java 21 para builds locais, Python 3 e Docker Engine para Linux com Compose. A leitura passiva dos logs requer o driver Docker `json-file`, configurado igualmente nas quatro aplicações de ambos os cenários.
 
-**Flyway:** cada serviço de domínio usa `spring.flyway.locations=classpath:db/migration/<pacote>`. Os nomes, versões `V1` e conteúdos dos scripts foram preservados. Cada processo executa apenas as migrações de sua location, em seu próprio banco.
+Execute um ambiente por vez: eles usam a mesma API em `127.0.0.1:8080` e as mesmas portas dos bancos. Os nomes dos projetos e volumes são distintos. A Parte 1 conserva o nome `tcc-microservices` para continuar usando seus volumes existentes; a Parte 2 usa `tcc-microservices-centralized`.
 
-O Dockerfile copia `target/microservices-1.0.0-SNAPSHOT-<serviço>.jar`. O Compose continua usando o contexto de build da raiz e os mesmos volumes PostgreSQL. O smoke test e o catálogo de falhas mantêm os mesmos comandos.
-
-Tecnologias: Java 21, Spring Boot 4.1.1, Spring Data JPA, Flyway e PostgreSQL 17. A infraestrutura de centralização de logs será adicionada na etapa do estudo dedicada à observabilidade.
-
-## Executar
-
-Requisitos: Docker com Compose. Para compilar ou testar fora dos containers: JDK 21 e acesso ao Maven Central na primeira execução. O smoke test utiliza Python 3, sem pacotes adicionais.
-
-Na raiz:
+Parte 1, na raiz:
 
 ```bash
-docker compose up --build -d --wait
-python3 scripts/smoke.py --check-logs
+sudo env FAULT_ENABLED=true ./tcc.sh non_centralized up --build -d --wait
+sudo ./non_centralized/experiments/run-experiment.sh E02
+sudo ./tcc.sh non_centralized down
 ```
 
-A API fica em `http://localhost:8080/api`. O primeiro build baixa dependências e imagens. Os bancos mantêm dados em três volumes independentes. As migrações Flyway criam o schema automaticamente; Hibernate apenas valida o schema. Não há dados pré-carregados.
+Parte 2:
 
 ```bash
-docker compose ps
-docker compose logs -f order-service
-docker compose down
+sudo env FAULT_ENABLED=true ./tcc.sh centralized up --build -d --wait
+sudo python3 centralized/scripts/observability.py
+sudo ./centralized/experiments/run-experiment.sh E02
+sudo ./tcc.sh centralized down
 ```
 
-`down` preserva os volumes. Para um novo experimento com bancos vazios, `docker compose down -v` **apaga os dados locais**.
+Se Docker funcionar sem sudo, retire o prefixo. Também é possível entrar na pasta do cenário e usar `docker compose` diretamente. O seletor sempre executa os comandos no diretório correto.
 
-Opcionalmente copie `.env.example` para `.env` e ajuste os valores. As credenciais padrão `tcc/tcc` são do ambiente experimental local; os bancos e o gateway são publicados apenas em `127.0.0.1`. Os serviços de domínio ficam na rede interna do Compose.
+`down` preserva os dados. Cada ambiente tem seus próprios resultados em `<ambiente>/experiments/results/<cenário>/<run-id>/`, ignorados pelo Git. Os dados anteriores da Parte 1 permanecem disponíveis com o mesmo nome Compose. Não use `down -v` durante a coleta experimental: ele remove os volumes.
 
-## Fluxo mínimo
+## Investigar os logs
 
-Em ambiente vazio, os primeiros IDs serão 1; em ambiente reutilizado, use os IDs retornados pelas respostas.
+Na Parte 1, use os arquivos individuais da execução ou `docker compose logs` dentro de `non_centralized/`.
+
+Na Parte 2, acesse [Grafana](http://localhost:3000), usuário `admin`, senha inicial `tcc-local`. Entre em **Explore**, selecione **Loki** e ajuste o intervalo à execução. O identificador está no `metadata.json` e no `response.json` da execução.
+
+```logql
+{job="tcc", service="product-service"}
+{job="tcc"} | json | level="ERROR"
+{job="tcc"} | json | traceId="IDENTIFICADOR_DA_EXECUCAO"
+```
+
+O dashboard **TCC — Visão geral dos logs** apresenta contagens e logs recentes. Explore é a ferramenta principal do protocolo. Os metadados com a falha conhecida ficam com o operador; forneça ao avaliador apenas a evidência definida na metodologia.
+
+## Verificar e manter a comparação
 
 ```bash
-curl -i http://localhost:8080/api/users \
-  -H 'Content-Type: application/json' \
-  -d '{"name":"Ricardo","email":"ricardo@example.com"}'
-
-curl -i http://localhost:8080/api/products \
-  -H 'Content-Type: application/json' \
-  -d '{"name":"Livro","description":"Produto de teste","price":19.95,"stock":10}'
-
-curl -i http://localhost:8080/api/orders \
-  -H 'Content-Type: application/json' \
-  -H 'X-Trace-Id: pedido-experimental-001' \
-  -d '{"userId":1,"items":[{"productId":1,"quantity":2}]}'
-
-curl -i http://localhost:8080/api/orders/1
-curl -i 'http://localhost:8080/api/orders?userId=1'
-```
-
-O pedido retorna HTTP 201, status `CREATED`, total `39.90` e itens com preço unitário e subtotal. O serviço consulta usuário e produtos antes de gravar; uma falha aborta a transação. Preços são calculados com `BigDecimal` e armazenados como snapshot no pedido. Não existem chaves estrangeiras entre bancos.
-
-O estoque é **consultado e validado**, sem reserva ou baixa. Cada produto aparece uma vez no pedido; quantidades devem estar entre 1 e 10000, com até 100 itens. Essa base não implementa pagamento, autenticação, carrinho, entrega ou processamento posterior do pedido. As listagens são simples, sem paginação, para pequenos conjuntos de dados experimentais.
-
-| Método | Endpoint externo |
-|---|---|
-| POST / GET | `/api/users` |
-| GET | `/api/users/{id}` |
-| POST / GET | `/api/products` |
-| GET | `/api/products/{id}` |
-| GET | `/api/products/{id}/availability` |
-| POST / GET | `/api/orders` |
-| GET | `/api/orders/{id}` |
-| GET | `/api/orders?userId={id}` |
-
-Internamente, os endpoints usam os mesmos caminhos sem `/api`. O health check fica em `/actuator/health` em cada aplicação.
-
-## Logs e erros
-
-O cabeçalho `X-Trace-Id` é propagado do gateway às chamadas de Order e devolvido na resposta. Quando ausente ou inválido, o serviço gera um UUID. IDs recebidos aceitam 1–64 caracteres de letras, números, `.`, `_` e `-`. O contexto de logging é limpo ao finalizar cada requisição.
-
-Os logs JSON no stdout contêm `timestamp`, `level`, `service`, `message` e, durante requisições, `traceId` e `operation`. Eventos de inicialização não têm contexto de requisição. Campos como `orderId`, `productId`, `downstreamStatus`, `durationMs`, `errorCode`, `details` de validação e `stack_trace` ajudam a diagnosticar falhas. Os logs não registram o corpo das requisições nem emails de usuários. O cenário de injeção fica nos metadados do operador, sem marcadores explícitos de injeção nos logs.
-
-Formato de erro:
-
-```json
-{
-  "timestamp": "2026-10-02T12:00:00Z",
-  "status": 422,
-  "code": "PRODUCT_NOT_FOUND",
-  "message": "Referenced resource does not exist in product-service",
-  "traceId": "pedido-experimental-001",
-  "details": []
-}
-```
-
-Validação retorna 400; recurso local ausente retorna 404; conflito de dados retorna 409; referência de pedido inexistente ou estoque insuficiente retorna 422. Order distingue resposta inválida/erro remoto (502) e timeout (504). Falhas de banco no serviço de origem retornam 503. O gateway preserva status e corpo recebidos e ajusta `Location` para `/api/...`.
-
-Os clientes têm timeout de conexão de 1000 ms e leitura de 2000 ms. A leitura no gateway é de 10000 ms para permitir que Order informe falhas nos serviços consultados. Não são adicionados mecanismos de recuperação automática.
-
-A aquisição de conexão no pool dos bancos tem limite padrão de 1000 ms, configurável com `DB_CONNECTION_TIMEOUT_MS`, para dar margem ao Order receber o erro antes de seu timeout HTTP. Esse limite não cobre toda consulta SQL.
-
-## Experimentos de erros controlados
-
-A injeção por requisição é desabilitada por padrão e ativada com `FAULT_ENABLED=true`. E02 e E05 usam parada real do banco/serviço; E03 e E04 usam cabeçalhos direcionados ao Product. O atraso atua somente em consultas GET, e o timeout é produzido pelo cliente HTTP do Order.
-
-```bash
-FAULT_ENABLED=true docker compose up --build -d --wait
-./experiments/run-experiment.sh E01
-./experiments/run-experiment.sh E02
-./experiments/run-experiment.sh E03
-./experiments/run-experiment.sh E04
-./experiments/run-experiment.sh E05
-./experiments/reset-environment.sh
-```
-
-Se o Docker exigir sudo, use `sudo env FAULT_ENABLED=true docker compose up --build -d --wait` na preparação e `sudo ./experiments/run-experiment.sh E02` para executar. O reset também aceita sudo.
-
-O executor cria dados válidos, captura o `traceId` gerado pela aplicação, salva cada execução em `experiments/results/<cenário>/<run-id>/` e restaura o recurso afetado mesmo em falhas ou interrupções tratáveis. Verifica ausência de pedidos persistidos e alterações de estoque. Os logs permanecem separados por serviço e o diagnóstico humano é feito posteriormente. O reset preserva volumes e desabilita a injeção nos processos, sem modificar `.env`.
-
-Consulte [experiments/README.md](experiments/README.md) para contratos HTTP, timeouts, limites da restauração e separação dos metadados do operador na avaliação.
-
-## Desenvolvimento e testes
-
-```bash
+python3 scripts/check-parity.py
+cd non_centralized
 ./mvnw clean verify
 python3 -m unittest discover -s experiments -p 'test_*.py' -v
+cd ../centralized
+./mvnw clean verify
+python3 -m unittest discover -s experiments -p 'test_*.py' -v
+python3 -m unittest discover -s scripts -p 'test_*.py' -v
 ```
 
-O build gera os quatro executáveis abaixo, além do JAR base `microservices-1.0.0-SNAPSHOT.jar`, usado no empacotamento:
+O verificador compara fontes Java, recursos, testes, POM, Dockerfile, wrapper Maven, smoke e implementação dos experimentos. Mudanças funcionais devem ser aplicadas aos dois cenários. Os wrappers centralizados acrescentam apenas verificações de infraestrutura e entrega dos logs; não alteram a injeção.
 
-```text
-target/microservices-1.0.0-SNAPSHOT-gateway.jar
-target/microservices-1.0.0-SNAPSHOT-user-service.jar
-target/microservices-1.0.0-SNAPSHOT-product-service.jar
-target/microservices-1.0.0-SNAPSHOT-order-service.jar
-```
+Builds aprovados: 15 testes Java por cenário; testes Python: 14 do executor por cenário e seis de observabilidade. E01–E05 e o pipeline real foram validados com processos locais, incluindo PostgreSQL e consulta pelo Grafana. Em Compose, E01–E04 centralizados e E02 sem centralização passaram. E05 centralizado retornou timeout de conexão/504 ao Product parado, divergindo do contrato previsto 502; restauração e invariantes passaram. A divergência permanece aberta. Veja o [relatório e os limites da validação](centralized/observability/VALIDATION.md).
 
-Os testes exercitam HTTP real das aplicações, validação, persistência e migrações em H2 no modo PostgreSQL. Os testes iniciam a classe principal de cada serviço para validar também sua seleção de configuração. Os testes de Order e gateway usam servidores HTTP locais controlados para testar chamadas, erros, timeout e propagação dos cabeçalhos. H2 é exclusivo dos testes; a execução padrão usa PostgreSQL. Para validar também PostgreSQL, containers e correlação entre as quatro aplicações, execute o smoke test no Compose.
+As fontes já produzem JSON e geram/propagam `traceId`. PostgreSQL não recebe esse identificador automaticamente; a correlação exigida abrange os processos Java. As falhas dos bancos são diagnosticadas pelas exceções registradas pelas aplicações.
 
-Também é possível iniciar apenas os bancos e executar aplicações em terminais separados:
+## Arquivos e decisões da Parte 2
 
-```bash
-docker compose up -d users-db products-db orders-db
-./mvnw package -DskipTests
-java -jar target/microservices-1.0.0-SNAPSHOT-user-service.jar
-java -jar target/microservices-1.0.0-SNAPSHOT-product-service.jar
-java -jar target/microservices-1.0.0-SNAPSHOT-order-service.jar
-java -jar target/microservices-1.0.0-SNAPSHOT-gateway.jar
-```
+O trabalho anterior foi movido com `git mv` para `non_centralized/`. A cópia em `centralized/` mantém o mesmo POM único, código Java, recursos e experimentos. O repositório contém dois projetos independentes para permitir executar cada cenário a partir da própria pasta.
 
-Fora do Compose, as portas padrão são 8081 (User), 8082 (Product), 8083 (Order) e 8080 (gateway). Os bancos usam 5431, 5432 e 5433. URLs, credenciais, porta e timeouts podem ser ajustados por `DB_URL`, `DB_USER`, `DB_PASSWORD`, `PORT`, `USER_SERVICE_URL`, `PRODUCT_SERVICE_URL`, `ORDER_SERVICE_URL`, `HTTP_CONNECT_TIMEOUT_MS` e `HTTP_READ_TIMEOUT_MS`.
+| Arquivos criados ou ajustados | Papel |
+|---|---|
+| `README.md`, `tcc.sh`, `scripts/check-parity.py` | Seleção dos cenários, instruções e comparação dos arquivos compartilhados |
+| `.gitignore`, `.gitattributes` | Ignorar builds/resultados das duas pastas e preservar finais de linha dos wrappers |
+| `*/compose.yaml` | Mesmo driver de logs nas aplicações; projetos/volumes separados; infraestrutura apenas na Parte 2 |
+| `centralized/observability/fluent-bit/` | Coleta passiva, recomposição Docker, parsing JSON e envio ao Loki |
+| `centralized/observability/loki/loki-config.yml` | Armazenamento local persistente em um processo |
+| `centralized/observability/grafana/` | Data Source e dashboard provisionados |
+| `*/experiments/runner.py`, `*/experiments/test_runner.py` | Pontos opcionais de verificação e teste da restauração antes da checagem de entrega |
+| `centralized/experiments/centralized_runner.py`, wrappers shell | Verificar infraestrutura antes e entrega depois, mantendo os mesmos cenários |
+| `centralized/scripts/observability.py`, `test_observability.py` | Conferir disponibilidade, campos/eventos e correlação recebidos no Loki |
+| READMEs e HELP de cada cenário | Comandos executados no diretório correto e orientação de investigação |
 
-O JSON utiliza o [logging estruturado nativo do Spring Boot](https://docs.spring.io/spring-boot/4.0/reference/features/logging.html), com MDC para correlação. As chamadas HTTP utilizam [RestClient do Spring Framework](https://docs.spring.io/spring-framework/reference/integration/rest-clients.html).
-
-
-## Importação no VS Code
-
-Abra a raiz que contém `pom.xml`. Após alterar a estrutura do projeto, execute **Java: Clean Java Language Server Workspace** na paleta de comandos (`Ctrl+Shift+P`) e confirme o reinício. Isso remove o índice antigo e importa o projeto Maven atual. A opção `java.configuration.updateBuildConfiguration` com valor `automatic` permite atualizar as dependências quando o POM mudar.
-
-As classes devem aparecer no projeto `microservices`. Os antigos projetos `demo`, `common` e `*-service` não fazem mais parte da estrutura Maven.
-
-## Validação
-
-O build passou em `clean verify`, com 15 testes Java. Os 10 testes Python do executor também passaram, usando HTTP real local e um substituto do controle Docker para verificar registro e restauração, incluindo interrupção, conexão perdida, falha na coleta, falha na recuperação e detecção de pedido persistido indevidamente.
-
-Os quatro JARs foram iniciados como processos separados com H2 temporário: passaram 20 verificações HTTP do smoke, a correlação nos quatro serviços, a confirmação do timeout real no Order com conclusão normal do GET atrasado no Product, a ausência de marcadores explícitos de injeção e o registro do campo inválido nos logs de validação. As configurações de execução continuam usando PostgreSQL.
-
-O Compose passou na validação de configuração. A execução E01–E05 com containers e PostgreSQL reais permanece pendente neste ambiente: o acesso ao daemon exige sudo e `sudo -n` solicita senha. Os comandos de execução com sudo estão documentados acima.
+Detalhes: [Parte 1](non_centralized/README.md), [Parte 2](centralized/README.md), [experimentos da Parte 1](non_centralized/experiments/README.md) e [centralização](centralized/observability/README.md).

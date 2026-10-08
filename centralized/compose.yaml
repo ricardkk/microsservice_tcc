@@ -1,5 +1,13 @@
-name: tcc-microservices
+name: tcc-microservices-centralized
 x-app: &app
+  labels: &app-labels
+    tcc.stack: centralized
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+      labels: "tcc.stack,tcc.service"
   environment: &app-env
     PORT: 8080
     FAULT_ENABLED: ${FAULT_ENABLED:-false}
@@ -46,6 +54,9 @@ services:
     volumes: ["orders-data:/var/lib/postgresql/data"]
   user-service:
     <<: *app
+    labels:
+      <<: *app-labels
+      tcc.service: user-service
     build:
       context: .
       args: {SERVICE: user-service}
@@ -57,6 +68,9 @@ services:
       users-db: {condition: service_healthy}
   product-service:
     <<: *app
+    labels:
+      <<: *app-labels
+      tcc.service: product-service
     build:
       context: .
       args: {SERVICE: product-service}
@@ -68,6 +82,9 @@ services:
       products-db: {condition: service_healthy}
   order-service:
     <<: *app
+    labels:
+      <<: *app-labels
+      tcc.service: order-service
     build:
       context: .
       args: {SERVICE: order-service}
@@ -83,6 +100,9 @@ services:
       product-service: {condition: service_healthy}
   gateway:
     <<: *app
+    labels:
+      <<: *app-labels
+      tcc.service: gateway
     build:
       context: .
       args: {SERVICE: gateway}
@@ -98,7 +118,45 @@ services:
       user-service: {condition: service_healthy}
       product-service: {condition: service_healthy}
       order-service: {condition: service_healthy}
+  loki:
+    image: grafana/loki:3.7.8
+    command: ["-config.file=/etc/loki/loki-config.yml", "-target=all"]
+    volumes:
+      - ./observability/loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+      - loki-data:/loki
+    ports: ["127.0.0.1:${LOKI_PORT:-3100}:3100"]
+  fluent-bit:
+    image: fluent/fluent-bit:5.1.3
+    user: "0:0"
+    command: ["-c", "/fluent-bit/config/fluent-bit.conf"]
+    volumes:
+      - ${DOCKER_LOG_DIR:-/var/lib/docker/containers}:/var/log/docker:ro
+      - ./observability/fluent-bit:/fluent-bit/config:ro
+      - fluent-bit-data:/var/lib/fluent-bit
+    ports: ["127.0.0.1:${FLUENT_BIT_PORT:-2020}:2020"]
+    depends_on:
+      loki: {condition: service_started}
+  grafana:
+    image: grafana/grafana:13.2.3
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-tcc-local}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_SERVER_ROOT_URL: http://localhost:${GRAFANA_PORT:-3000}
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/etc/grafana/dashboards:ro
+    ports: ["127.0.0.1:${GRAFANA_PORT:-3000}:3000"]
+    depends_on:
+      loki: {condition: service_started}
 volumes:
   users-data:
   products-data:
   orders-data:
+  loki-data:
+  fluent-bit-data:
+  grafana-data:
