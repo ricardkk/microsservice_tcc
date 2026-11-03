@@ -24,7 +24,7 @@ microsservice_tcc/
 
 Cada cenário é um projeto Maven independente, com um único POM e sua própria `src/`. O Git permanece na raiz. Abra a pasta do cenário no editor para trabalhar no respectivo projeto Java.
 
-Consulte o [guia detalhado de execução e investigação](GUIA_EXPERIMENTOS.md) para os comandos de cada ambiente e de E01–E05, consultas dos logs, restauração e registro da comparação.
+Consulte o [roteiro completo de testes e coleta](ROTEIRO_TESTES_COLETA.md) para builds, testes Python, smoke, E01–E05 nos dois ambientes, consulta dos logs, exportação do CSV e preservação dos resultados.
 
 ## Executar os cenários
 
@@ -82,7 +82,7 @@ python3 -m unittest discover -s scripts -p 'test_*.py' -v
 
 O verificador compara fontes Java, recursos, testes, POM, Dockerfile, wrapper Maven, smoke e implementação dos experimentos. Mudanças funcionais devem ser aplicadas aos dois cenários. Os wrappers centralizados acrescentam apenas verificações de infraestrutura e entrega dos logs; não alteram a injeção.
 
-Builds aprovados: 15 testes Java por cenário; testes Python: 14 do executor por cenário e seis de observabilidade. E01–E05 e o pipeline real foram validados com processos locais, incluindo PostgreSQL e consulta pelo Grafana. Em Compose, E01–E04 centralizados e E02 sem centralização passaram. E05 centralizado retornou timeout de conexão/504 ao Product parado, divergindo do contrato previsto 502; restauração e invariantes passaram. A divergência permanece aberta. Veja o [relatório e os limites da validação](centralized/observability/VALIDATION.md).
+Na revisão de 12/10/2026, passaram 16 testes Java por cenário, 14 testes Python do executor por cenário e seis de observabilidade. A paridade e os dois Compose foram validados. A classificação de timeout de conexão foi corrigida para E05 retornar 502 / `DOWNSTREAM_UNAVAILABLE`; timeout de resposta mantém 504 / `DOWNSTREAM_TIMEOUT`. Os resultados Docker anteriores permanecem preservados e a repetição com imagens reconstruídas ainda precisa confirmar a correção em runtime. Veja o [relatório e os limites da validação](centralized/observability/VALIDATION.md).
 
 As fontes já produzem JSON e geram/propagam `traceId`. PostgreSQL não recebe esse identificador automaticamente; a correlação exigida abrange os processos Java. As falhas dos bancos são diagnosticadas pelas exceções registradas pelas aplicações.
 

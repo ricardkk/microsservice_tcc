@@ -1,0 +1,136 @@
+{
+  "selection": "Eventos cujo traceId corresponde ao metadata.json de cada execução",
+  "representation": "Uma barra por caso, com contagens por execução iguais nos dois ambientes; sem soma entre ambientes",
+  "runs": [
+    {
+      "environment": "non_centralized",
+      "case": "E01",
+      "metadata": "coleta/rodada-01/non_centralized/experiments/E01/20261014T120155418180Z-f3c5e00a/metadata.json",
+      "traceId": "3e297d00-198b-4f6b-a239-a9a407f9eab1",
+      "event_counts": {
+        "gateway": 5,
+        "order-service": 3,
+        "user-service": 0,
+        "product-service": 0
+      },
+      "total": 8
+    },
+    {
+      "environment": "centralized",
+      "case": "E01",
+      "metadata": "coleta/rodada-01/centralized/experiments/E01/20261014T120740002093Z-e141437f/metadata.json",
+      "traceId": "5a23ee8d-27b5-47c7-b978-3d23af4c8201",
+      "event_counts": {
+        "gateway": 5,
+        "order-service": 3,
+        "user-service": 0,
+        "product-service": 0
+      },
+      "total": 8
+    },
+    {
+      "environment": "non_centralized",
+      "case": "E02",
+      "metadata": "coleta/rodada-01/non_centralized/experiments/E02/20261014T120202903006Z-96330720/metadata.json",
+      "traceId": "d5726edb-9b0f-459d-927e-182f1ddbc459",
+      "event_counts": {
+        "gateway": 5,
+        "order-service": 8,
+        "user-service": 3,
+        "product-service": 9
+      },
+      "total": 25
+    },
+    {
+      "environment": "centralized",
+      "case": "E02",
+      "metadata": "coleta/rodada-01/centralized/experiments/E02/20261014T120805623624Z-3f687297/metadata.json",
+      "traceId": "d5018a79-0a45-49fa-b29b-9c0f6a4b29f4",
+      "event_counts": {
+        "gateway": 5,
+        "order-service": 8,
+        "user-service": 3,
+        "product-service": 9
+      },
+      "total": 25
+    },
+    {
+      "environment": "non_centralized",
+      "case": "E03",
+      "metadata": "coleta/rodada-01/non_centralized/experiments/E03/20261014T120218453075Z-8e08bd84/metadata.json",
+      "traceId": "961ca731-db0c-4899-9d42-cc9b07cd47ca",
+      "event_counts": {
+        "gateway": 5,
+        "order-service": 8,
+        "user-service": 3,
+        "product-service": 3
+      },
+      "total": 19
+    },
+    {
+      "environment": "centralized",
+      "case": "E03",
+      "metadata": "coleta/rodada-01/centralized/experiments/E03/20261014T120819711645Z-212ebe32/metadata.json",
+      "traceId": "b3952597-5ad1-49c0-9bf0-70e85495e6ad",
+      "event_counts": {
+        "gateway": 5,
+        "order-service": 8,
+        "user-service": 3,
+        "product-service": 3
+      },
+      "total": 19
+    },
+    {
+      "environment": "non_centralized",
+      "case": "E04",
+      "metadata": "coleta/rodada-01/non_centralized/experiments/E04/20261014T120237684032Z-bd05c27f/metadata.json",
+      "traceId": "571f5e83-f911-43f9-83fb-0626833849af",
+      "event_counts": {
+        "gateway": 5,
+        "order-service": 8,
+        "user-service": 3,
+        "product-service": 3
+      },
+      "total": 19
+    },
+    {
+      "environment": "centralized",
+      "case": "E04",
+      "metadata": "coleta/rodada-01/centralized/experiments/E04/20261014T120831142032Z-3b363ed7/metadata.json",
+      "traceId": "b8afd45a-a241-4154-b316-4064403ff58e",
+      "event_counts": {
+        "gateway": 5,
+        "order-service": 8,
+        "user-service": 3,
+        "product-service": 3
+      },
+      "total": 19
+    },
+    {
+      "environment": "non_centralized",
+      "case": "E05",
+      "metadata": "coleta/rodada-01/non_centralized/experiments/E05/20261014T120243237364Z-d61a1ff8/metadata.json",
+      "traceId": "07744452-8b78-4ccc-9941-9029d27d29f8",
+      "event_counts": {
+        "gateway": 5,
+        "order-service": 8,
+        "user-service": 3,
+        "product-service": 0
+      },
+      "total": 16
+    },
+    {
+      "environment": "centralized",
+      "case": "E05",
+      "metadata": "coleta/rodada-01/centralized/experiments/E05/20261014T120837047488Z-a1c1401e/metadata.json",
+      "traceId": "cb012115-193b-4eba-a9c1-a02a0811b476",
+      "event_counts": {
+        "gateway": 5,
+        "order-service": 8,
+        "user-service": 3,
+        "product-service": 0
+      },
+      "total": 16
+    }
+  ]
+}

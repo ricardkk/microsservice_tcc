@@ -1,6 +1,7 @@
 package common;
 
 import java.net.ConnectException;
+import java.net.http.HttpConnectTimeoutException;
 import java.net.http.HttpTimeoutException;
 import org.junit.jupiter.api.Test;
 import org.slf4j.MDC;
@@ -24,6 +25,14 @@ class InfrastructureTest {
  @Test void connectionRefusalAndTimeoutHaveDistinctDiagnosticCodes() {
   assertThat(CommunicationErrors.map(new ResourceAccessException("timeout", new HttpTimeoutException("test")), "product-service").status()).isEqualTo(504);
   assertThat(CommunicationErrors.map(new ResourceAccessException("refused", new ConnectException("test")), "product-service").code()).isEqualTo("DOWNSTREAM_UNAVAILABLE");
+ }
+ @Test void connectionTimeoutIdentifiesUnavailableServiceEvenWhenWrapped() {
+  var timeout = new HttpConnectTimeoutException("HTTP connect timed out");
+  timeout.initCause(new ConnectException("HTTP connect timed out"));
+  var error = new ResourceAccessException("I/O error", new java.io.IOException("transport", timeout));
+  var failure = CommunicationErrors.map(error, "product-service");
+  assertThat(failure.status()).isEqualTo(502);
+  assertThat(failure.code()).isEqualTo("DOWNSTREAM_UNAVAILABLE");
  }
  @Test void invalidFaultConfigurationFailsEarly() {
   assertThatThrownBy(() -> new FaultInterceptor(true, "user-service", 0)).isInstanceOf(IllegalArgumentException.class);

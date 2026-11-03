@@ -48,7 +48,7 @@ Execuções adicionais fornecidas pelo usuário e conferidas pelos metadados loc
 | centralized | E05 | 20261007T123153253168Z-14fec67a | 504 / DOWNSTREAM_TIMEOUT | Divergiu do contrato 502 / DOWNSTREAM_UNAVAILABLE; coleta, restauração e invariantes aprovadas |
 | non_centralized | E02 | 20261007T123934487633Z-621c7675 | 502 / DOWNSTREAM_ERROR | Aprovado |
 
-Em E05, o Order registrou `HttpConnectTimeoutException: HTTP connect timed out` ao tentar chamar o Product parado. A aplicação classificou esse sintoma como timeout. A verificação de entrega pelo wrapper não foi executada porque o contrato HTTP falhou. A divergência permanece aberta para investigação; não se reclassificou a injeção como E03 e a execução foi preservada. Os registros comprovam resultados técnicos, sem preencher diagnósticos humanos nem medir seu tempo.
+Em E05, o Order registrou `HttpConnectTimeoutException: HTTP connect timed out` ao tentar chamar o Product parado. A aplicação classificou esse sintoma como timeout. A verificação de entrega pelo wrapper não foi executada porque o contrato HTTP falhou. A causa dessa divergência foi corrigida no código em 12/10/2026, conforme a revisão abaixo; a confirmação com imagens reconstruídas permanece pendente. A execução anterior foi preservada. Os registros comprovam resultados técnicos, sem preencher diagnósticos humanos nem medir seu tempo.
 
 Para validar essa parte na máquina com sudo autorizado, execute na raiz do repositório, com o cenário sem centralização parado:
 
@@ -63,3 +63,11 @@ sudo ./tcc.sh centralized ps
 ```
 
 O runner centralizado só declara sucesso depois de restaurar a aplicação e conferir a entrega no Loki. Os resultados ficam em `centralized/experiments/results/`, ignorados pelo Git. Consulte a mesma execução no Grafana Explore usando o trace e o intervalo registrados em `metadata.json`.
+
+## Revisão de código e testes — 12/10/2026
+
+`HttpConnectTimeoutException` é uma subclasse de `HttpTimeoutException` que indica que a conexão não foi estabelecida no prazo, conforme a [API Java 21](https://docs.oracle.com/en/java/javase/21/docs/api/java.net.http/java/net/http/HttpConnectTimeoutException.html). O mapeamento genérico de timeout devolvia 504 antes de distinguir essa condição. `CommunicationErrors` passou a mapear o timeout de conexão para 502 / `DOWNSTREAM_UNAVAILABLE`; timeout de resposta mantém 504 / `DOWNSTREAM_TIMEOUT`.
+
+A correção foi aplicada igualmente aos dois ambientes, com um teste que cobre a exceção encapsulada por outras exceções de transporte. O teste reproduziu a divergência antes da correção, esperando 502 e recebendo 504. Depois do ajuste, os dois `clean verify` passaram com 16 testes Java cada. Também passaram os 14 testes Python de cada executor, os seis testes de observabilidade, a paridade dos 55 arquivos e a validação dos dois Compose. Os quatro JARs executáveis foram gerados em cada ambiente.
+
+A verificação atual não repetiu os experimentos em containers porque sudo continua exigindo senha. Reconstrua as imagens e repita E01–E05 em cada ambiente, conferindo especialmente E03 e E05. Preserve os resultados anteriores e registre novas execuções separadas. O [roteiro completo](../../ROTEIRO_TESTES_COLETA.md) inclui os comandos para salvar logs dos testes, resultados experimentais, exportações e CSV.

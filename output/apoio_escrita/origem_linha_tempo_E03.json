@@ -1,0 +1,88 @@
+[
+  {
+    "environment": "non_centralized",
+    "metadata": "coleta/rodada-01/non_centralized/experiments/E03/20261014T120218453075Z-8e08bd84/metadata.json",
+    "traceId": "961ca731-db0c-4899-9d42-cc9b07cd47ca",
+    "origin": "2026-10-14T12:02:18.615136302Z",
+    "events": {
+      "gateway_start": {
+        "timestamp": "2026-10-14T12:02:18.615136302Z",
+        "relative_seconds": 0.0,
+        "status": null,
+        "service": "gateway",
+        "message": "Request started"
+      },
+      "gateway_end": {
+        "timestamp": "2026-10-14T12:02:20.642536239Z",
+        "relative_seconds": 2.0274,
+        "status": 504,
+        "service": "gateway",
+        "message": "Request completed"
+      },
+      "product_start": {
+        "timestamp": "2026-10-14T12:02:18.630952315Z",
+        "relative_seconds": 0.015816,
+        "status": null,
+        "service": "product-service",
+        "message": "Request started"
+      },
+      "product_end": {
+        "timestamp": "2026-10-14T12:02:23.637115337Z",
+        "relative_seconds": 5.021979,
+        "status": 200,
+        "service": "product-service",
+        "message": "Request completed"
+      },
+      "order_timeout": {
+        "timestamp": "2026-10-14T12:02:20.632818193Z",
+        "relative_seconds": 2.017682,
+        "status": 504,
+        "service": "order-service",
+        "message": "Timeout calling product-service"
+      }
+    }
+  },
+  {
+    "environment": "centralized",
+    "metadata": "coleta/rodada-01/centralized/experiments/E03/20261014T120819711645Z-212ebe32/metadata.json",
+    "traceId": "b3952597-5ad1-49c0-9bf0-70e85495e6ad",
+    "origin": "2026-10-14T12:08:19.884277385Z",
+    "events": {
+      "gateway_start": {
+        "timestamp": "2026-10-14T12:08:19.884277385Z",
+        "relative_seconds": 0.0,
+        "status": null,
+        "service": "gateway",
+        "message": "Request started"
+      },
+      "gateway_end": {
+        "timestamp": "2026-10-14T12:08:21.933364275Z",
+        "relative_seconds": 2.049087,
+        "status": 504,
+        "service": "gateway",
+        "message": "Request completed"
+      },
+      "product_start": {
+        "timestamp": "2026-10-14T12:08:19.925337649Z",
+        "relative_seconds": 0.04106,
+        "status": null,
+        "service": "product-service",
+        "message": "Request started"
+      },
+      "product_end": {
+        "timestamp": "2026-10-14T12:08:24.941116845Z",
+        "relative_seconds": 5.056839,
+        "status": 200,
+        "service": "product-service",
+        "message": "Request completed"
+      },
+      "order_timeout": {
+        "timestamp": "2026-10-14T12:08:21.925689587Z",
+        "relative_seconds": 2.041412,
+        "status": 504,
+        "service": "order-service",
+        "message": "Timeout calling product-service"
+      }
+    }
+  }
+]

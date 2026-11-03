@@ -209,8 +209,10 @@ As classes devem aparecer no projeto `microservices`. Os antigos projetos `demo`
 
 ## Validação
 
-`./mvnw clean verify` passou com 15 testes Java. Os 14 testes Python do executor passaram, usando HTTP real local e um substituto do controle Docker para verificar registro e restauração, incluindo interrupção, conexão perdida, falha na coleta, falha na recuperação e detecção de pedido persistido indevidamente.
+Na revisão de 12/10/2026, `./mvnw clean verify` passou com 16 testes Java. Os 14 testes Python do executor passaram, usando HTTP real local e um substituto do controle Docker para verificar registro e restauração, incluindo interrupção, conexão perdida, falha na coleta, falha na recuperação e detecção de pedido persistido indevidamente. O teste novo cobre a classificação de timeout de conexão como serviço indisponível, corrigida igualmente nos dois ambientes.
 
 A aplicação mantém paridade em 55 arquivos com a Parte 2. A implementação compartilhada dos experimentos também foi exercitada com quatro JARs e três PostgreSQL reais em processos locais: E01–E05 passaram, com contratos, restauração e invariantes aprovados. Veja o [relatório da Parte 2](../centralized/observability/VALIDATION.md) para o método e os limites dessa validação.
 
 O Compose passou na validação de configuração. A execução dos containers permanece pendente neste ambiente: o acesso ao daemon exige sudo e `sudo -n` solicita senha. Os comandos de execução com sudo estão documentados acima.
+
+O [roteiro completo de testes e coleta](../ROTEIRO_TESTES_COLETA.md) mostra como reconstruir as imagens após a correção e salvar todos os resultados.

@@ -34,3 +34,4 @@ build/
 **/experiments/results/*
 !**/experiments/results/.gitkeep
 __pycache__/
+/coleta/
